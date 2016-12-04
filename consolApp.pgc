@@ -1,0 +1,101 @@
+#include <stdio.h>
+#include <string.h>
+#include <stdlib.h>
+#include <ecpgtype.h>
+#include <ecpglib.h>
+#include <sqlda.h>
+EXEC SQL WHENEVER SQLERROR CALL print_sqlca();
+
+EXEC SQL BEGIN DECLARE SECTION;
+char query[1000];
+const char *target = "201401409@10.100.71.21";
+const char *user = "201401409";
+const char *password = "201401409";
+EXEC SQL END DECLARE SECTION;
+
+void print_sqlca()
+{
+    fprintf(stderr, "==== sqlca ====\n");
+    fprintf(stderr, "sqlcode: %ld\n", sqlca.sqlcode);
+    fprintf(stderr, "sqlerrm.sqlerrml: %d\n", sqlca.sqlerrm.sqlerrml);
+    fprintf(stderr, "sqlerrm.sqlerrmc: %s\n", sqlca.sqlerrm.sqlerrmc);
+    fprintf(stderr, "sqlerrd: %ld %ld %ld %ld %ld %ld\n", sqlca.sqlerrd[0],sqlca.sqlerrd[1],sqlca.sqlerrd[2],
+                                                          sqlca.sqlerrd[3],sqlca.sqlerrd[4],sqlca.sqlerrd[5]);
+    fprintf(stderr, "sqlwarn: %d %d %d %d %d %d %d %d\n", sqlca.sqlwarn[0], sqlca.sqlwarn[1], sqlca.sqlwarn[2],
+                                                          sqlca.sqlwarn[3], sqlca.sqlwarn[4], sqlca.sqlwarn[5],
+                                                          sqlca.sqlwarn[6], sqlca.sqlwarn[7]);
+    fprintf(stderr, "sqlstate: %5s\n", sqlca.sqlstate);
+    fprintf(stderr, "===============\n");
+}
+
+void ExecuteQuery() 
+{ 
+//Executes SELECT type of sql statement and displays 
+//returned rows one row on a line on "stdout" if no error, 
+//otherwise displays error details */ 
+    sqlda_t *outdesc = (sqlda_t *) malloc(sizeof(sqlda_t) + sizeof(sqlvar_t)); /* an output descriptor */
+
+    EXEC SQL PREPARE query_prep FROM :query;
+    EXEC SQL DECLARE mycur CURSOR FOR query_prep;
+    EXEC SQL OPEN mycur;
+
+    EXEC SQL FETCH FROM mycur INTO DESCRIPTOR outdesc;
+
+    int i;
+    printf("   ");
+    for (i = 0; i < outdesc->sqld; i++)
+    {
+        sqlvar_t v = outdesc->sqlvar[i];
+        printf("|%-15s ",v.sqlname.data);
+    }
+    printf("\n");
+    int j = 1; 
+    while ( sqlca.sqlcode == 0 ) {
+  
+           printf("%3d",j++);
+           for (i = 0; i < outdesc->sqld; i++)
+           {
+                sqlvar_t v = outdesc->sqlvar[i];
+                short sqllen  = v.sqllen;
+                if(v.sqltype==ECPGt_int)
+                {
+                    int intval;
+                    memcpy(&intval, v.sqldata, sqllen);
+                    printf("|%d ",intval);
+                }
+                else
+                {
+                    printf("|%s ",v.sqldata);   
+                }
+           }
+           printf("\n");
+        EXEC SQL FETCH NEXT FROM mycur INTO DESCRIPTOR outdesc;
+     }
+     
+} 
+void ExecuteUpdate()
+{  
+//Executes INSERT/UPDATE/DELETE type of sql statement 
+//and displays "successful" on stdout if no error, 
+//otherwise displays error details. 
+    EXEC SQL PREPARE query_prep FROM :query;
+    EXEC SQL EXECUTE query_prep;
+    EXEC SQL COMMIT;
+    //printf("here\n");
+} 
+int main()
+{
+   
+    EXEC SQL CONNECT TO :target USER :user USING :password;
+    EXEC SQL set search_path to event;
+
+    printf ("Enter your query : \n");
+    scanf("%[^\n]*c",query);
+
+    if(query[0]=='S' || query[0]=='s')
+        ExecuteQuery();
+    else
+        ExecuteUpdate();
+    
+
+}
